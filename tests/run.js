@@ -154,5 +154,39 @@ for (const [name, params, expM, extra] of PR) {
   check("Clés uniques pour l'export agenda", new Set(p3.events.map(e => e.key)).size === p3.events.length);
 }
 
+/* ---------- 7. Programmes d'instillations (TVNIM), CCAFU 2024-2026 ----------
+   Dates attendues calculées à la main (et vérifiées hors du code de l'app).
+   Première instillation le lundi 2 février 2026 ; cycles recalés sur le lundi le plus proche. */
+{
+  const meta = g => ({ group: g });
+  const ids = g => J.programsFor("tvnim", meta(g)).map(x => x.id).join(",");
+  check("Faible risque : aucun programme d'instillation", ids("low") === "");
+  check("Risque intermédiaire : BCG et mitomycine", ids("mid") === "bcg,chimio");
+  check("Haut et très haut risque : BCG seul", ids("high") === "bcg" && ids("vhigh") === "bcg");
+  check("Le protocole transmet son groupe de risque", J.buildPlan("tvnim", { grade: "hg" }, "2026-01-10", 60, 85).meta.group === "high");
+  check("Entretien BCG par défaut : 1 an si intermédiaire, 3 ans sinon",
+    J.programDefaults("tvnim", "bcg", meta("mid")).entretien === "12" && J.programDefaults("tvnim", "bcg", meta("high")).entretien === "36");
+
+  const bcg1 = J.buildProgram("tvnim", "bcg", { entretien: "12" }, "2026-02-02", meta("mid")).events.map(e => e.date);
+  const expBcg1 = ["2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02", "2026-03-09",
+    "2026-05-04", "2026-05-11", "2026-05-18", "2026-08-03", "2026-08-10", "2026-08-17", "2027-02-01", "2027-02-08", "2027-02-15"];
+  check("BCG 1 an : 6 inductions puis 3 instillations à M3, M6 et M12", same(bcg1, expBcg1), diff(bcg1, expBcg1));
+
+  const bcg3 = J.buildProgram("tvnim", "bcg", { entretien: "36" }, "2026-02-02", meta("high")).events;
+  check("BCG 3 ans : 27 instillations, dernier cycle à M36", bcg3.length === 27 && bcg3[24].date === "2029-02-05" && bcg3[26].date === "2029-02-19",
+    `${bcg3.length} instillations, ${bcg3[24] && bcg3[24].date} à ${bcg3[26] && bcg3[26].date}`);
+  check("BCG 3 ans : clés uniques pour l'export agenda", new Set(bcg3.map(e => e.key)).size === 27);
+  check("BCG : toutes les instillations tombent un lundi", bcg3.every(e => J.parseISO(e.date).getDay() === 1));
+
+  const mmc = J.buildProgram("tvnim", "chimio", {}, "2026-02-02", meta("mid")).events.map(e => e.date);
+  const expMmc = ["2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02", "2026-03-09",
+    "2026-04-20", "2026-05-18", "2026-06-22", "2026-07-20", "2026-08-17", "2026-09-21", "2026-10-19", "2026-11-23", "2026-12-21"];
+  check("Mitomycine : 6 inductions, puis 9 mensuelles dès 6 semaines après la dernière induction", same(mmc, expMmc), diff(mmc, expMmc));
+
+  const bcgDef = J.PROTOCOLS.tvnim.programs.bcg;
+  check("Début BCG proposé : RTUV + 3 semaines, ou + 7 semaines si pT1",
+    bcgDef.startWeeks(J.defaults("tvnim")) === 3 && bcgDef.startWeeks(Object.assign(J.defaults("tvnim"), { stade: "pT1" })) === 7);
+}
+
 console.log(`\n${pass} vérifications réussies, ${fail} échec${fail > 1 ? "s" : ""}.`);
 process.exit(fail ? 1 : 0);
