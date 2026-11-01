@@ -5,7 +5,7 @@ Calendriers de surveillance après chirurgie urologique, selon les recommandatio
 **Prototype. Les protocoles ne sont pas validés pour un usage en soins** : ils doivent être relus par un second praticien avant toute utilisation clinique.
 
 Protocoles disponibles :
-- RTUV pour TVNIM (CCAFU 2024-2026, tableaux III et IV)
+- RTUV pour TVNIM (CCAFU 2024-2026, tableaux III et IV), avec programmation des instillations : BCG-thérapie (induction et entretien de 1 ou 3 ans) et mitomycine C
 - Prostatectomie totale (CCAFU 2024-2026, surveillance du PSA)
 
 ## Mettre l'application en ligne sur GitHub (sans ligne de commande)
