@@ -44,6 +44,9 @@
     if (!/^[a-z][a-z0-9-]*$/.test(def.id)) throw new Error(`Protocole ${def.id} : identifiant invalide`);
     if (PROTOCOLS[def.id]) throw new Error(`Protocole ${def.id} déclaré deux fois`);
     if (typeof def.plan !== "function") throw new Error(`Protocole ${def.id} : plan doit être une fonction`);
+    for (const [k, g] of Object.entries(def.programs || {})) {
+      if (!g.name || typeof g.plan !== "function") throw new Error(`Protocole ${def.id} : programme ${k} incomplet`);
+    }
     PROTOCOLS[def.id] = Object.assign({ dateLabel: "Date de l'intervention", validated: false }, def);
   }
 
@@ -83,12 +86,54 @@
       }
       events.push({ key: keyOf(e), m: e.m, w: e.w, label: labelOf(e), date, phase: e.phase, title: e.title, exam: e.exam, short: e.short, done: false });
     }
-    return { chips: res.chips, why: res.why, alerts: res.alerts, events };
+    return { chips: res.chips, why: res.why, alerts: res.alerts, meta: res.meta || {}, events };
+  }
+
+  /* ---------- Programmes de traitement (instillations) ----------
+     Un protocole peut déclarer des programmes (BCG, chimiothérapie) dont le calendrier part
+     de la date de la première administration, saisie sur la fiche patient.
+     Un événement de programme : { base (jours), m (mois), d (jours), ... } ; date = début + base,
+     + m mois (recalé sur le même jour de la semaine si sameWeekday), + d jours. */
+  function programsFor(id, meta) {
+    const pr = PROTOCOLS[id];
+    if (!pr || !pr.programs) return [];
+    return Object.entries(pr.programs)
+      .filter(([, g]) => !g.available || g.available(meta || {}))
+      .map(([k, g]) => Object.assign({ id: k }, g));
+  }
+  function programDefaults(id, progId, meta) {
+    const g = PROTOCOLS[id].programs[progId];
+    const out = {};
+    for (const [key, , options, def] of (g.fields || [])) out[key] = def != null ? def : optionValue(options[0]);
+    return Object.assign(out, g.defaults ? g.defaults(meta || {}) : {});
+  }
+  function sameWeekdayNear(date, weekday) {
+    const delta = (weekday - date.getDay() + 7) % 7;
+    return addDays(date, delta <= 3 ? delta : delta - 7);
+  }
+  function buildProgram(id, progId, opts, startISO, meta) {
+    const g = PROTOCOLS[id] && PROTOCOLS[id].programs && PROTOCOLS[id].programs[progId];
+    if (!g) throw new Error(`Programme inconnu : ${id}/${progId}`);
+    const o = Object.assign(programDefaults(id, progId, meta), opts);
+    const start = parseISO(startISO);
+    const events = g.plan(o).map(e => {
+      const base = addDays(start, e.base || 0);
+      let at = addMonths(base, e.m || 0);
+      if (g.sameWeekday && e.m) at = sameWeekdayNear(at, base.getDay());
+      return {
+        key: `${progId}-b${e.base || 0}-m${e.m || 0}-d${e.d || 0}`,
+        date: isoOf(addDays(at, e.d || 0)),
+        label: e.label, phase: e.phase, title: e.title, exam: e.exam, short: e.short,
+        kind: "instil", done: false
+      };
+    }).sort((a, b) => a.date.localeCompare(b.date));
+    return { options: o, events };
   }
 
   root.Jalons = Object.assign(root.Jalons || {}, {
     parseISO, isoOf, addMonths, addDays, todayISO, daysBetween,
     offsetMonths, labelOf, keyOf,
-    PROTOCOLS, registerProtocol, defaults, optionValue, optionText, buildPlan
+    PROTOCOLS, registerProtocol, defaults, optionValue, optionText, buildPlan,
+    programsFor, programDefaults, buildProgram
   });
 })(typeof window !== "undefined" ? window : globalThis);

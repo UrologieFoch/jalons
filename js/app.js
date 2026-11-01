@@ -69,7 +69,8 @@
     }
   }
   const newId = () => Date.now().toString(36) + Array.from(crypto.getRandomValues(new Uint8Array(3)), x => x.toString(16).padStart(2, "0")).join("");
-  const pending = p => p.events.filter(e => !e.done && !e.stop);
+  const allEvents = p => p.events.concat(...(p.programs || []).map(g => g.events));
+  const pending = p => allEvents(p).filter(e => !e.done && !e.stop && !e.cancelled);
   const nextOf = p => pending(p).sort((a, b) => a.date.localeCompare(b.date))[0];
   const findPatient = id => db.patients.find(p => p.id === id);
 
@@ -290,9 +291,10 @@
       </header>
       <section class="card">${plan ? chipsHTML(plan.chips) + `<p class="why">${esc(plan.why)}</p>` + notesHTML(plan.alerts) : `<div class="note info">Ce protocole n'existe plus dans cette version de l'app. Le calendrier enregistré reste affiché.</div>`}${versionNote ? `<div class="notes">${versionNote}</div>` : ""}${friseHTML(p.events, p.date)}</section>
       <section class="card"><h2>Calendrier</h2>${list}</section>
+      ${programsHTML(p, plan)}
       <section class="card stack">
         <h2>Rappels</h2>
-        <p class="sub">Exporte les contrôles à venir vers l'agenda du téléphone ou de l'ordinateur, avec une alerte 30 jours avant chacun. Les événements ne portent que le code ${esc(p.code)}.</p>
+        <p class="sub">Exporte les contrôles et instillations à venir vers l'agenda du téléphone ou de l'ordinateur, avec une alerte 30 jours avant chaque contrôle et 7 jours avant chaque instillation. Les événements ne portent que le code ${esc(p.code)}.</p>
         <div class="actions"><button class="btn primary" id="ics" type="button">Exporter vers l'agenda</button></div>
       </section>
       <div id="del-zone" class="actions"><button class="btn danger" id="del" type="button">Supprimer ce patient</button></div>`;
@@ -302,6 +304,7 @@
       save(); viewPatient(id);
     }));
     document.getElementById("ics").addEventListener("click", () => exportICS(p));
+    bindPrograms(p, plan, id);
     document.getElementById("del").addEventListener("click", () => {
       document.getElementById("del-zone").innerHTML = `<div class="confirm"><span>Supprimer définitivement ${esc(p.ref)} et son calendrier ?</span>
         <div class="actions"><button class="btn danger" id="del-yes" type="button">Supprimer</button><button class="btn" id="del-no" type="button">Annuler</button></div></div>`;
@@ -310,6 +313,97 @@
       });
       document.getElementById("del-no").addEventListener("click", () => viewPatient(id));
     });
+  }
+
+  /* ===================== Programmes d'instillations ===================== */
+  function programEventsHTML(g, gi) {
+    let html = "", phase = null;
+    g.events.forEach((e, j) => {
+      if (e.phase !== phase) { phase = e.phase; html += `<div class="phase">${esc(phase)}</div>`; }
+      const off = e.cancelled;
+      html += `<div class="ev${e.done || off ? " done" : ""}">
+        ${off ? "<span></span>" : `<input type="checkbox" data-g="${gi}" data-j="${j}"${e.done ? " checked" : ""} aria-label="${esc(e.title)} du ${esc(fmtLong(e.date))} faite">`}
+        <span class="what"><span class="when">${esc(fmtShort(e.date))} <small>${esc(e.label)}</small> ${off ? `<span class="tag ok">annulée</span>` : (!e.done ? dueTag(e.date) : "")}</span><strong>${esc(e.title)}</strong><span class="ex">${esc(e.exam)}</span></span>
+      </div>`;
+    });
+    return html;
+  }
+  function programsHTML(p, plan) {
+    const avail = plan ? J.programsFor(p.op, plan.meta) : [];
+    const progs = p.programs || [];
+    if (!avail.length && !progs.length) return "";
+    const active = progs.some(g => !g.stopped && g.events.some(e => !e.done && !e.cancelled));
+    const blocks = progs.map((g, gi) => {
+      const done = g.events.filter(e => e.done).length;
+      const isActive = !g.stopped && g.events.some(e => !e.done && !e.cancelled);
+      return `<div class="stack">
+        <h3>${esc(g.name)}</h3>
+        <p class="sub">Début le ${esc(fmtLong(g.start))}, ${g.events.length} instillations, ${done} faite${done > 1 ? "s" : ""}${g.stopped ? `. Arrêté le ${esc(fmtLong(g.stopped))}` : ""}.</p>
+        <div>${programEventsHTML(g, gi)}</div>
+        ${isActive ? `<div class="actions" id="stop-zone-${gi}"><button class="btn danger" type="button" data-stop="${gi}">Arrêter ce programme</button></div>` : ""}
+      </div>`;
+    }).join("");
+    const buttons = !active && avail.length
+      ? `<div class="actions">${avail.map(g => `<button class="btn primary" type="button" data-prog="${esc(g.id)}">Programmer : ${esc(g.short)}</button>`).join("")}</div>` : "";
+    return `<section class="card stack" id="instil"><h2>Instillations</h2>
+      ${progs.length ? "" : `<p class="sub">Calendrier compté depuis la première instillation, à saisir quand elle est fixée.</p>`}
+      ${blocks}${buttons}<div id="prog-form"></div></section>`;
+  }
+  function programForm(p, plan, progId, id) {
+    const def = J.PROTOCOLS[p.op].programs[progId];
+    const params = Object.assign(J.defaults(p.op), p.params);
+    const weeks = def.startWeeks ? def.startWeeks(params) : 3;
+    const state = { start: J.isoOf(J.addDays(J.parseISO(p.date), weeks * 7)), opts: J.programDefaults(p.op, progId, plan.meta) };
+    const zone = document.getElementById("prog-form");
+    const summary = () => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(state.start)) return "Indiquez la date de la première instillation.";
+      const r = J.buildProgram(p.op, progId, state.opts, state.start, plan.meta).events;
+      return `${r.length} instillations, du ${fmtLong(r[0].date)} au ${fmtLong(r[r.length - 1].date)}.`;
+    };
+    zone.innerHTML = `<div class="stack">
+      <h3>${esc(def.name)}</h3>
+      <div class="grid">
+        <label class="wide">Date de la première instillation<input id="pg-start" type="date" value="${esc(state.start)}"></label>
+        ${(def.fields || []).map(([key, label, options]) => `<label class="wide">${esc(label)}<select data-pk="${esc(key)}">${options.map(o => {
+          const v = J.optionValue(o);
+          return `<option value="${esc(v)}"${String(state.opts[key]) === String(v) ? " selected" : ""}>${esc(J.optionText(o))}</option>`;
+        }).join("")}</select></label>`).join("")}
+      </div>
+      <p class="hint">${esc(def.startHint || "")}${def.sameWeekday ? " Les cycles suivants sont calés sur le même jour de la semaine." : ""}</p>
+      <p class="hint" id="pg-sum">${esc(summary())}</p>
+      <div class="actions"><button class="btn primary" id="pg-save" type="button">Enregistrer le programme</button><button class="btn" id="pg-cancel" type="button">Annuler</button></div>
+    </div>`;
+    const refresh = () => { document.getElementById("pg-sum").textContent = summary(); };
+    document.getElementById("pg-start").addEventListener("input", e => { state.start = e.target.value; refresh(); });
+    zone.querySelectorAll("select[data-pk]").forEach(s => s.addEventListener("change", () => { state.opts[s.dataset.pk] = s.value; refresh(); }));
+    document.getElementById("pg-cancel").addEventListener("click", () => { zone.innerHTML = ""; });
+    document.getElementById("pg-save").addEventListener("click", () => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(state.start)) { toast("Indiquez la date de la première instillation."); return; }
+      const r = J.buildProgram(p.op, progId, state.opts, state.start, plan.meta);
+      p.programs = p.programs || [];
+      p.programs.push({ id: newId(), kind: progId, name: def.name, short: def.short, version: def.version || "1", start: state.start, options: r.options, created: today(), stopped: null, events: r.events });
+      if (!save()) { p.programs.pop(); return; }
+      toast("Programme enregistré."); viewPatient(id);
+    });
+    zone.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  function bindPrograms(p, plan, id) {
+    app.querySelectorAll("input[data-g]").forEach(c => c.addEventListener("change", () => {
+      p.programs[Number(c.dataset.g)].events[Number(c.dataset.j)].done = c.checked;
+      save(); viewPatient(id);
+    }));
+    app.querySelectorAll("[data-prog]").forEach(b => b.addEventListener("click", () => programForm(p, plan, b.dataset.prog, id)));
+    app.querySelectorAll("[data-stop]").forEach(b => b.addEventListener("click", () => {
+      const gi = Number(b.dataset.stop), g = p.programs[gi];
+      const zone = document.getElementById("stop-zone-" + gi);
+      zone.innerHTML = `<div class="confirm"><span>Arrêter ${esc(g.short)} ? Les instillations non faites seront annulées et retirées de l'agenda.</span>
+        <div class="actions"><button class="btn danger" id="stop-yes" type="button">Arrêter</button><button class="btn" id="stop-no" type="button">Annuler</button></div></div>`;
+      document.getElementById("stop-yes").addEventListener("click", () => {
+        g.stopped = today(); g.events.forEach(e => { if (!e.done) e.cancelled = true; });
+        save(); toast("Programme arrêté."); viewPatient(id);
+      });
+      document.getElementById("stop-no").addEventListener("click", () => viewPatient(id));
+    }));
   }
 
   /* ===================== Export agenda (.ics) ===================== */
@@ -343,7 +437,9 @@
         `SUMMARY:${icsText(`Jalons ${p.code} : ${e.short}`)}`,
         `DESCRIPTION:${icsText(`${e.title}. ${e.exam} Patient : code ${p.code} dans Jalons.`)}`,
         "TRANSP:TRANSPARENT",
-        "BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${icsText(`Préparer ordonnance et rendez-vous, ${p.code}`)}`, "TRIGGER:-P30D", "END:VALARM",
+        "BEGIN:VALARM", "ACTION:DISPLAY",
+        `DESCRIPTION:${icsText(e.kind === "instil" ? `Instillation dans 7 jours, ${p.code}` : `Préparer ordonnance et rendez-vous, ${p.code}`)}`,
+        e.kind === "instil" ? "TRIGGER:-P7D" : "TRIGGER:-P30D", "END:VALARM",
         "END:VEVENT"
       );
     }
@@ -474,7 +570,8 @@
       <section class="card">
         <h2>Protocoles</h2>
         ${Object.values(J.PROTOCOLS).map(pr => `<div class="proto"><b>${esc(pr.name)}</b>, version ${esc(pr.version)}, ${pr.validated ? "validé" : "non validé"}
-          <p><b>Source.</b> ${esc(pr.source)}</p><p><b>Choix locaux.</b> ${esc(pr.local)}</p></div>`).join("")}
+          <p><b>Source.</b> ${esc(pr.source)}</p><p><b>Choix locaux.</b> ${esc(pr.local)}</p>
+          ${Object.values(pr.programs || {}).map(g => `<p><b>${esc(g.name)}.</b> ${esc(g.source)} <b>Choix locaux.</b> ${esc(g.local)}</p>`).join("")}</div>`).join("")}
       </section>
       <section class="card stack">
         <h2>À propos</h2>
