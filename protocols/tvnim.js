@@ -104,9 +104,9 @@
         alerts.push({ tone: "alert", lead: "Très haut risque", text: "BCG avec entretien de 3 ans ou cystectomie précoce avec curage ganglionnaire étendu. Dossier à présenter en RCP." });
         if (s.reclass) alerts.push({ tone: "info", text: "Reclassement en haut risque possible si la dernière re-résection est inférieure à pT1 avec muscle vu (cystectomie alors optionnelle)." });
       } else if (grp === "high") {
-        alerts.push({ tone: "info", text: "Traitement adjuvant : BCG, induction puis entretien de 3 ans. Les instillations ne figurent pas dans ce calendrier." });
+        alerts.push({ tone: "info", text: "Traitement adjuvant : BCG, induction puis entretien de 3 ans, à programmer dans la section Instillations une fois la date de la première instillation fixée." });
       } else if (grp === "mid") {
-        alerts.push({ tone: "info", text: "Traitement adjuvant : instillations de chimiothérapie (mitomycine C ou épirubicine) en première intention, BCG avec entretien de 12 mois en cas d'échec." });
+        alerts.push({ tone: "info", text: "Traitement adjuvant : instillations de chimiothérapie (mitomycine C ou épirubicine) en première intention, BCG avec entretien de 12 mois en cas d'échec. À programmer dans la section Instillations." });
       } else {
         alerts.push({ tone: "info", text: "Traitement adjuvant : IPOP seule, aucun autre traitement complémentaire." });
       }
@@ -168,7 +168,58 @@
         for (let m = end + 12; m <= capM; m += 12) cysto(m, "Prolongé, tabagisme actif", "à arrêter après sevrage tabagique");
       }
 
-      return { chips, why, alerts, ev: [...byKey.values()] };
+      return { chips, why, alerts, meta: { group: grp }, ev: [...byKey.values()] };
+    },
+
+    /* Programmes d'instillations : calendrier compté depuis la première instillation,
+       saisie sur la fiche patient (la date réelle dépend de la cicatrisation et du second look). */
+    programs: {
+      bcg: {
+        name: "BCG-thérapie",
+        short: "BCG",
+        version: "1",
+        available: meta => meta.group === "mid" || meta.group === "high" || meta.group === "vhigh",
+        startWeeks: p => (p.stade === "pT1" || p.rtuv !== "ok" ? 7 : 3),
+        startHint: "Après cicatrisation vésicale, 2 à 4 semaines après la dernière résection, au plus tard à 6 semaines, en l'absence de tumeur résiduelle.",
+        sameWeekday: true,
+        fields: [["entretien", "Entretien", [["12", "1 an (3, 6, 12 mois)"], ["36", "3 ans (jusqu'au 36e mois)"]], "36"]],
+        defaults: meta => ({ entretien: meta.group === "mid" ? "12" : "36" }),
+        source: "CCAFU 2024-2026 (TVNIM) : début 2 à 4 semaines après la résection, au plus tard à 6 semaines ; induction de 6 instillations hebdomadaires ; entretien de 3 instillations à 3, 6 et 12 mois de la première instillation (risque intermédiaire, 1 an), poursuivi tous les 6 mois jusqu'au 36e mois (haut risque, 3 ans).",
+        local: "Entretien compté depuis la première instillation (texte 2024-2026), alors que les recommandations spécifiques du CCAFU sur les instillations le comptent depuis la résection. Instillations d'entretien hebdomadaires, cycles calés sur le jour de la semaine de la première instillation. Date de début proposée : RTUV + 3 semaines, ou + 7 semaines après un second look. À valider.",
+        plan(o) {
+          const ev = [];
+          for (let i = 0; i < 6; i++) {
+            ev.push({ d: i * 7, phase: "BCG, induction", label: `${i + 1}/6`, title: `BCG, induction ${i + 1}/6`, exam: "Instillation endovésicale de BCG.", short: `BCG induction ${i + 1}/6` });
+          }
+          const months = o.entretien === "12" ? [3, 6, 12] : [3, 6, 12, 18, 24, 30, 36];
+          for (const m of months) for (let i = 0; i < 3; i++) {
+            ev.push({ m, d: i * 7, phase: `BCG, entretien ${o.entretien === "12" ? "1 an" : "3 ans"}`, label: `M${m} ${i + 1}/3`, title: `BCG, entretien M${m} ${i + 1}/3`, exam: "Instillation endovésicale de BCG, cycle d'entretien.", short: `BCG entretien M${m} ${i + 1}/3` });
+          }
+          return ev;
+        }
+      },
+      chimio: {
+        name: "Chimiothérapie endovésicale (mitomycine C)",
+        short: "Mitomycine",
+        version: "1",
+        available: meta => meta.group === "mid",
+        startWeeks: p => (p.stade === "pT1" || p.rtuv !== "ok" ? 7 : 3),
+        startHint: "Date de la première instillation d'induction.",
+        sameWeekday: true,
+        fields: [],
+        source: "CCAFU 2024-2026 (TVNIM), risque intermédiaire : induction d'une instillation par semaine pendant 6 semaines, puis entretien d'une instillation par mois débutant 6 semaines après la dernière dose d'induction, pendant 9 mois.",
+        local: "« Pendant 9 mois » lu comme 9 instillations mensuelles. Délai de début proposé repris du BCG. Instillations mensuelles calées sur le jour de la semaine de la première. À valider.",
+        plan() {
+          const ev = [];
+          for (let i = 0; i < 6; i++) {
+            ev.push({ d: i * 7, phase: "Mitomycine, induction", label: `${i + 1}/6`, title: `Mitomycine C, induction ${i + 1}/6`, exam: "Instillation endovésicale de mitomycine C.", short: `Mitomycine induction ${i + 1}/6` });
+          }
+          for (let k = 0; k < 9; k++) {
+            ev.push({ base: 77, m: k, phase: "Mitomycine, entretien mensuel", label: `${k + 1}/9`, title: `Mitomycine C, entretien ${k + 1}/9`, exam: "Instillation endovésicale de mitomycine C, entretien mensuel.", short: `Mitomycine entretien ${k + 1}/9` });
+          }
+          return ev;
+        }
+      }
     }
   });
 })();
