@@ -2,7 +2,7 @@
 
 Calendriers de surveillance après chirurgie urologique, selon les recommandations du Comité de cancérologie de l'AFU (CCAFU). Application web installable sur téléphone et ordinateur. Les données restent sur l'appareil.
 
-**Prototype. Les protocoles ne sont pas validés pour un usage en soins** : ils doivent être relus par un second praticien avant toute utilisation clinique.
+**Version de test. Jalons n'est pas un dispositif médical** : il n'a pas de marquage CE et n'est destiné ni au diagnostic ni au choix d'un traitement. Il ne doit pas participer à une décision médicale isolée : les calendriers et les alertes, non validés, doivent être vérifiés par le praticien, qui reste seul responsable de la prise en charge. L'application l'affiche en tête de chaque écran et le fait accepter au premier lancement.
 
 Protocoles disponibles :
 - RTUV pour TVNIM (CCAFU 2024-2026, tableaux III et IV), avec programmation des instillations : BCG-thérapie (induction et entretien de 1 ou 3 ans) et mitomycine C
@@ -56,6 +56,7 @@ Résultat attendu : « 0 échec ».
 | `css/app.css` | Présentation, mode clair et sombre |
 | `js/engine.js` | Dates, registre des protocoles, calcul du calendrier. Aucune règle clinique |
 | `js/app.js` | Interface, stockage, export agenda, sauvegarde, verrouillage |
+| `js/disclaimer.js` | Avertissement : bandeau sur chaque écran, acceptation au premier lancement |
 | `protocols/*.js` | Un fichier par pathologie : toutes les règles cliniques sont là |
 | `tests/run.js` | Tests, calendriers attendus écrits à la main depuis les recommandations |
 | `sw.js` | Fonctionnement hors connexion |

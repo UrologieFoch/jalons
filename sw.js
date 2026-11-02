@@ -1,10 +1,10 @@
 /* Jalons : cache hors connexion.
    Changer VERSION à chaque mise à jour des fichiers, pour que les téléphones récupèrent la nouvelle version.
    Ajouter ici tout nouveau fichier de protocole (et sa balise <script> dans index.html). */
-const VERSION = "jalons-3";
+const VERSION = "jalons-4";
 const FILES = [
   "./", "index.html", "manifest.webmanifest", "css/app.css",
-  "js/engine.js", "js/app.js",
+  "js/engine.js", "js/app.js", "js/disclaimer.js",
   "protocols/tvnim.js", "protocols/prostatectomie.js", "protocols/rein.js", "protocols/testicule.js",
   "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable-512.png", "icons/apple-touch-icon.png"
 ];
