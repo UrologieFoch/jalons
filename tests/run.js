@@ -188,5 +188,70 @@ for (const [name, params, expM, extra] of PR) {
     bcgDef.startWeeks(J.defaults("tvnim")) === 3 && bcgDef.startWeeks(Object.assign(J.defaults("tvnim"), { stade: "pT1" })) === 7);
 }
 
+/* ---------- 8. Rein, CCAFU 2024-2026, tableaux III et IV ---------- */
+{
+  const R = [
+    ["UISS faible : pT1a G2 ECOG 0", {}, "Risque faible (UISS)", [6, 12, 24, 36, 60]],
+    ["UISS intermédiaire : pT2a G2 ECOG 0", { pt: "pT2a" }, "Risque intermédiaire (UISS)", [6, 12, 18, 24, 36, 48, 60, 72, 96, 120]],
+    ["UISS intermédiaire : pT1b G3 ECOG 0", { pt: "pT1b", g: "3" }, "Risque intermédiaire (UISS)", [6, 12, 18, 24, 36, 48, 60, 72, 96, 120]],
+    ["UISS intermédiaire : pT1a G2 ECOG 1", { ecog: "1" }, "Risque intermédiaire (UISS)", [6, 12, 18, 24, 36, 48, 60, 72, 96, 120]],
+    ["UISS intermédiaire : pT3a G1 ECOG 1", { pt: "pT3a", g: "1", ecog: "1" }, "Risque intermédiaire (UISS)", [6, 12, 18, 24, 36, 48, 60, 72, 96, 120]],
+    ["UISS intermédiaire : pT3a G3 ECOG 0", { pt: "pT3a", g: "3" }, "Risque intermédiaire (UISS)", [6, 12, 18, 24, 36, 48, 60, 72, 96, 120]],
+    ["UISS élevé : pT3a G3 ECOG 1", { pt: "pT3a", g: "3", ecog: "1" }, "Risque élevé (UISS)", [3, 6, 9, 12, ...seq(18, 60, 6), ...seq(72, 120, 12)]],
+    ["UISS élevé : pT4", { pt: "pT4", g: "1" }, "Risque élevé (UISS)", [3, 6, 9, 12, ...seq(18, 60, 6), ...seq(72, 120, 12)]],
+    ["pN1 sur pT1 : risque élevé par choix local", { pn: "n1" }, "Risque élevé (UISS)", [3, 6, 9, 12, ...seq(18, 60, 6), ...seq(72, 120, 12)]],
+    ["chromophobe pT3a G4 ECOG 1 : grade ignoré", { histo: "chromo", pt: "pT3a", g: "4", ecog: "1" }, "Risque intermédiaire (UISS)", [6, 12, 18, 24, 36, 48, 60, 72, 96, 120]],
+    ["ablation thermique, 5 ans", { trt: "ta" }, "Suivi spécifique après ablation", [3, 6, 12, 24, 36, 48, 60]],
+    ["ablation thermique, 10 ans", { trt: "ta", fin: "10" }, "Suivi spécifique après ablation", [3, 6, ...seq(12, 120, 12)]]
+  ];
+  for (const [name, params, grp, expM] of R) {
+    const r = run("rein", params);
+    check(`Rein ${name} : groupe`, group(r) === grp, `attendu ${grp}, obtenu ${group(r)}`);
+    check(`Rein ${name} : mois`, same(months(r), expM), diff(months(r), expM));
+  }
+  const pembro = params => alertText(run("rein", params)).includes("Pembrolizumab adjuvant");
+  check("Rein : pembrolizumab si cellules claires pT3", pembro({ pt: "pT3a" }));
+  check("Rein : pembrolizumab si cellules claires pT2 grade 4", pembro({ pt: "pT2b", g: "4" }));
+  check("Rein : pembrolizumab si cellules claires pT2 sarcomatoïde", pembro({ pt: "pT2a", sarco: "oui" }));
+  check("Rein : pembrolizumab si cellules claires pN1", pembro({ pn: "n1" }));
+  check("Rein : pas de pembrolizumab pour pT2 grade 3", !pembro({ pt: "pT2a", g: "3" }));
+  check("Rein : pas de pembrolizumab pour un papillaire pT3", !pembro({ histo: "pap", pt: "pT3a" }));
+  check("Rein : pas de pembrolizumab après ablation", !pembro({ trt: "ta", pt: "pT3a" }));
+  check("Rein : fonction rénale à chaque contrôle", run("rein", {}).ev.every(e => e.exam.includes("DFG")));
+}
+
+/* ---------- 9. Testicule, CCAFU 2024-2026, tableaux IX et X ---------- */
+{
+  const tdm = r => sorted(r).filter(e => e.short.includes("TDM")).map(e => e.m);
+  const T1 = [
+    ["séminome stade I", {}, [1, 6, 12, 18, 24, 30, 36, 48, 60], [6, 12, 18, 24, 36, 60]],
+    ["TGNS stade I ILV-", { histo: "tgns" }, [1, 3, 6, 9, 12, 15, 18, 21, 24, 36, 48, 60], [6, 12, 24, 36, 60]],
+    ["TGNS stade I ILV+", { histo: "tgns", ilv: "oui", strat: "bep" }, [1, 3, 6, 9, 12, 15, 18, 21, 24, 30, 36, 42, 48, 54, 60], [6, 12, 18, 24, 36, 60]],
+    ["séminome stade I avec ILV : même calendrier", { ilv: "oui" }, [1, 6, 12, 18, 24, 30, 36, 48, 60], [6, 12, 18, 24, 36, 60]]
+  ];
+  for (const [name, params, expM, expT] of T1) {
+    const r = run("testicule-1", params);
+    check(`Testicule ${name} : marqueurs`, same(months(r), expM), diff(months(r), expM));
+    check(`Testicule ${name} : scanners`, same(tdm(r), expT), diff(tdm(r), expT));
+  }
+  check("TGNS ILV+ en surveillance : BEP recommandé", alertText(run("testicule-1", { histo: "tgns", ilv: "oui" })).includes("BEP est l'option recommandée"));
+  check("Séminome sous BEP : stratégie signalée", alertText(run("testicule-1", { strat: "bep" })).includes("Stratégie inhabituelle"));
+
+  const XA = [1, 3, 6, 9, 12, 15, 18, 21, 24, 30, 36, 42, 48, 54, 60], XAT = [6, 12, 24, 36, 48, 60];
+  const XB = [2, 4, 6, 8, 10, 12, 18, 24, 30, 36, 42, 48, 54, 60], XBT = [4, 8, 12, 18, 24, 30, 36, 48, 60];
+  const TM = [
+    ["bon pronostic, rémission complète", {}, XA, XAT],
+    ["pronostic intermédiaire, sans lésion active", { prono: "inter" }, XA, XAT],
+    ["mauvais pronostic", { prono: "mauvais" }, XB, XBT],
+    ["bon pronostic avec lésion active résiduelle", { resid: "active" }, XB, XBT]
+  ];
+  for (const [name, params, expM, expT] of TM) {
+    const r = run("testicule-m", params);
+    check(`Testicule après chimiothérapie, ${name} : marqueurs`, same(months(r), expM), diff(months(r), expM));
+    check(`Testicule après chimiothérapie, ${name} : scanners`, same(tdm(r), expT), diff(tdm(r), expT));
+  }
+  check("Séminome de mauvais pronostic : incohérence signalée", alertText(run("testicule-m", { histo: "tgs", prono: "mauvais" })).includes("pas de groupe de mauvais pronostic"));
+}
+
 console.log(`\n${pass} vérifications réussies, ${fail} échec${fail > 1 ? "s" : ""}.`);
 process.exit(fail ? 1 : 0);
