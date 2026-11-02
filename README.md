@@ -6,7 +6,9 @@ Calendriers de surveillance après chirurgie urologique, selon les recommandatio
 
 Protocoles disponibles :
 - RTUV pour TVNIM (CCAFU 2024-2026, tableaux III et IV), avec programmation des instillations : BCG-thérapie (induction et entretien de 1 ou 3 ans) et mitomycine C
-- Prostatectomie totale (CCAFU 2024-2026, surveillance du PSA)
+- Prostatectomie totale (CCAFU 2024-2026, surveillance du PSA, conduite selon l'anatomopathologie)
+- Cancer du rein localisé : néphrectomie partielle ou élargie (UISS, tableau IV) et ablation thermique (CCAFU 2024-2026)
+- Tumeur germinale du testicule de stade I, après orchidectomie (tableau IX), et tumeur germinale métastatique en rémission après chimiothérapie (tableau X) (CCAFU 2024-2026)
 
 ## Mettre l'application en ligne sur GitHub (sans ligne de commande)
 
