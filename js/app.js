@@ -290,8 +290,8 @@
         <p class="code">Code agenda <b>${esc(p.code)}</b>, seul identifiant exporté.</p>
       </header>
       <section class="card">${plan ? chipsHTML(plan.chips) + `<p class="why">${esc(plan.why)}</p>` + notesHTML(plan.alerts) : `<div class="note info">Ce protocole n'existe plus dans cette version de l'app. Le calendrier enregistré reste affiché.</div>`}${versionNote ? `<div class="notes">${versionNote}</div>` : ""}${friseHTML(p.events, p.date)}</section>
-      <section class="card"><h2>Calendrier</h2>${list}</section>
       ${programsHTML(p, plan)}
+      <section class="card"><h2>Calendrier</h2>${list}</section>
       <section class="card stack">
         <h2>Rappels</h2>
         <p class="sub">Exporte les contrôles et instillations à venir vers l'agenda du téléphone ou de l'ordinateur, avec une alerte 30 jours avant chaque contrôle et 7 jours avant chaque instillation. Les événements ne portent que le code ${esc(p.code)}.</p>
